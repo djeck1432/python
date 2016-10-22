@@ -1,0 +1,72 @@
+# coding: utf-8
+import requests
+from lxml import html
+import urlparse
+import smtplib
+
+class Avito(object):
+    MAX_SUMM = 600000
+    RESULT = []
+
+    def parse_avito_RUN(self):
+        url = 'https://www.avito.ru/naberezhnye_chelny/zapchasti_i_aksessuary/audio-_i_videotehnika?view=gallery'
+        r = requests.get(url)
+        res = html.fromstring(r.content)
+        result = res.xpath(u'//*[contains(text(),"Последняя")]/@href')
+        num = self._get_page_num(result[0])
+        result = self.get_page_data(num)
+        return result
+
+    def get_page_data(self, num):
+        url = 'https://www.avito.ru/naberezhnye_chelny/zapchasti_i_aksessuary/audio-_i_videotehnika?view=gallery'
+        for i in xrange(1, num):
+            r = requests.get(url.format(i))
+            self.get_all(r.content)
+        return self.RESULT
+
+    def get_page_num(self, href):
+        result = urlparse.urlparse(href)
+        result = urlparse.parse_qs(result.query)
+        return int(result['p'][0])
+
+    def get_all(self, data):
+        data = self._get_desc(data)
+        for key, i in enumerate(data):
+            href = i.xpath('//h3[@class="title"]/a/@href')[key]
+            title = i.xpath('//h3[@class="title"]/a/@title')[key]
+            address = i.xpath('//h3[@class="address fader"]/text()')[key]
+            summ = i.xpath('//dev[@class="about"]/text()[1]')[key]
+            summ = summ.strip()
+            if summ:
+                summ = summ.split(' ')
+                summ = int(''.join(summ[0].split()))
+                if summ > self.MAX_SUMM:
+                    continue
+            else:
+                summ = u'Без цены '
+            self.RESULT.append({'title': title,
+                                'href': 'https://www.avito.ru' + href,
+                                'address': address,
+                                'sum': summ
+                                })
+    def _get_desc(self, data):
+        return self.get_from_xpath(data, '//div[@class="description"]')
+
+    def get_from_xpath(self, data, xpath):
+        res = html.fromstring(data)
+        return res.xpath(xpath)
+
+if _name_ == '__main__':
+
+    avito = Avito()
+    avito.parse_avito_RUN()
+    msg = u'Subject: Магнитолы'+"\n"
+    for res in avito.RESULT:
+        for k, i in res.items():
+            msg+=str(res[k]).strip()+"\n"
+        msg+='---------------------------'+'\n'
+    server = smtplib.SMTP('smtp.yandex.ru', 465)
+    server.starttls()
+    server.login("kamaexpert@yandex.ru", "g***0")
+    server.sendmail("kamaexpert@yandex.ru", "kamaexpert@yandex.ru", msg)
+    server.quit()﻿
